@@ -1,81 +1,59 @@
 import React, { useState } from 'react';
-import { View, Button, Image, StyleSheet, Text, Alert } from 'react-native';
-import { launchImageLibrary } from 'react-native-image-picker';
-import RNFS from 'react-native-fs';
-import jsQR from 'jsqr';
-import { Buffer } from 'buffer'; // Import Buffer from the buffer package
+import { View, Button, Text, Image, Alert, StyleSheet } from 'react-native';
+import DocumentPicker from 'react-native-document-picker';
+import RNQRGenerator from 'rn-qr-generator';
 
 const Main = () => {
   const [selectedImage, setSelectedImage] = useState(null);
-  const [qrCodeData, setQRCodeData] = useState(null);
+  const [qrCodeData, setQRCodeData] = useState('');
 
-  const openGallery = () => {
-    launchImageLibrary(
-      {
-        mediaType: 'photo',
-        quality: 1,
-      },
-      async (response) => {
-        if (response.didCancel) {
-          console.log('User cancelled image picker');
-        } else if (response.error) {
-          console.log('ImagePicker Error: ', response.error);
-        } else if (response.assets) {
-          const imageUri = response.assets[0].uri;
-          setSelectedImage(imageUri);
+  const pickImage = async () => {
+    try {
+      const result = await DocumentPicker.pick({
+        type: [DocumentPicker.types.images],
+      });
 
-          const qrData = await scanQRCode(imageUri);
-          setQRCodeData(qrData);
-        }
+      if (result && result[0]) {
+        const fileUri = result[0].uri;
+        setSelectedImage(fileUri);
+        
+        scanQRCode(fileUri);
       }
-    );
+    } catch (err) {
+      if (DocumentPicker.isCancel(err)) {
+        console.log('Canceled');
+      } else {
+        console.error('Error picking the document: ', err);
+      }
+    }
   };
 
-  const scanQRCode = async (imageUri) => {
-    try {
-      const imagePath = imageUri.replace('file://', '');
-      const base64Image = await RNFS.readFile(imagePath, 'base64');
-      const imageBuffer = Buffer.from(base64Image, 'base64'); // Use Buffer from buffer package
-
-      const image = new Image();
-      image.src = `data:image/png;base64,${base64Image}`;
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      canvas.width = image.width;
-      canvas.height = image.height;
-      context.drawImage(image, 0, 0);
-
-      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-      const qrCode = jsQR(imageData.data, canvas.width, canvas.height);
-
-      if (qrCode) {
-        return qrCode.data; // QR Code data
-      } else {
-        Alert.alert('No QR code found');
-        return null;
-      }
-    } catch (error) {
-      console.log('QR Code decoding error: ', error);
-      Alert.alert('Error', 'Unable to decode QR code');
-      return null;
-    }
+  const scanQRCode = (imageUri) => {
+    RNQRGenerator.detect({ uri: imageUri })
+      .then((response) => {
+        const { values } = response;
+        if (values.length > 0) {
+          setQRCodeData(values[0]); 
+          Alert.alert('QR Code Found', values[0]);
+        } else {
+          Alert.alert('No QR Code Found', 'No QR code was detected in the image.');
+        }
+      })
+      .catch((error) => {
+        console.log('QR code detection failed:', error);
+        Alert.alert('Error', 'Could not scan the image for a QR code.');
+      });
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>QR Code Scanner</Text>
-      <Button title="Open Gallery" onPress={openGallery} color="#F9D689" />
-
+      <Button title="Select Image" onPress={pickImage} color="#FFD700" /> 
+      
       {selectedImage && (
-        <View style={styles.imageContainer}>
+        <>
           <Image source={{ uri: selectedImage }} style={styles.image} />
-        </View>
-      )}
-
-      {qrCodeData && (
-        <View style={styles.qrCodeContainer}>
-          <Text style={styles.qrCodeText}>QR Code Data: {qrCodeData}</Text>
-        </View>
+          <Text style={styles.qrCodeText}>QR Code Data: {qrCodeData || 'N/A'}</Text>
+        </>
       )}
     </View>
   );
@@ -86,32 +64,20 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#973131',
-    padding: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#F9D689',
-  },
-  imageContainer: {
-    marginTop: 20,
+    backgroundColor: '#000000', 
   },
   image: {
-    width: 300,
-    height: 300,
-    resizeMode: 'cover',
-    borderWidth: 2,
-    borderColor: '#F9D689',
-    borderRadius: 10,
-  },
-  qrCodeContainer: {
+    width: 200,
+    height: 200,
     marginTop: 20,
+    borderColor: '#FFD700', 
+    borderWidth: 2,
   },
   qrCodeText: {
-    fontSize: 18,
-    color: '#F9D689',
+    marginTop: 10,
+    color: '#FFD700',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 
